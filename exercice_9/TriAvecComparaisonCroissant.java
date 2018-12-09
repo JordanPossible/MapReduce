@@ -1,0 +1,110 @@
+
+import java.io.IOException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.util.logging.FileHandler;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+
+
+// =========================================================================
+// CLASSE MAIN
+// =========================================================================
+
+public class TriAvecComparaisonCroissant {
+	private static final String INPUT_PATH = "input-groupBy/";
+	private static final String OUTPUT_PATH = "output/9-TriAvecComparaisonCroissant-";
+	private static final Logger LOG = Logger.getLogger(TriAvecComparaisonCroissant.class.getName());
+
+	static {
+		System.setProperty("java.util.logging.SimpleFormatter.format", "%5$s%n%6$s");
+
+		try {
+			FileHandler fh = new FileHandler("out.log");
+			fh.setFormatter(new SimpleFormatter());
+			LOG.addHandler(fh);
+		} catch (SecurityException | IOException e) {
+			System.exit(1);
+		}
+	}
+
+
+	// =========================================================================
+	// MAPPER
+	// =========================================================================
+
+	public static class Map extends Mapper<LongWritable, Text, Text, Text> {
+
+	    public static boolean isValidDate(String isDate) {
+	        SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/YYYY");
+	        dateFormat.setLenient(false);
+	        try {
+	            dateFormat.parse(isDate.trim());
+	        } catch (ParseException pe) {
+	            return false;
+	        }
+	        return true;
+	    }
+	    
+	    public static String switchDateFormat(String date) {
+	    	String[] splitedDate = date.split("\\/");
+			return splitedDate[2] + "/" + splitedDate[1] + "/" + splitedDate[0];
+	    }
+	    
+		@Override
+		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+			String line = value.toString();
+			String[] splited = line.split("\\,");
+			String date = splited[3];
+			if(isValidDate(date))
+				context.write(new Text(switchDateFormat(date)) , new Text(line));	
+		}
+	}
+
+	// =========================================================================
+	// REDUCER
+	// =========================================================================
+
+	public static class Reduce extends Reducer<Text, IntWritable, Text, IntWritable> {
+
+		public void reduce(Text key, Iterable<IntWritable> values, Context context) {
+		}
+	}
+
+	// =========================================================================
+	// MAIN
+	// =========================================================================
+
+	public static void main(String[] args) throws Exception {
+		Configuration conf = new Configuration();
+
+		Job job = new Job(conf, "9-Sort-C");
+		
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(Text.class);
+
+		job.setMapperClass(Map.class);
+
+		job.setInputFormatClass(TextInputFormat.class);
+		job.setOutputFormatClass(TextOutputFormat.class);
+
+		FileInputFormat.addInputPath(job, new Path(INPUT_PATH));
+		FileOutputFormat.setOutputPath(job, new Path(OUTPUT_PATH + Instant.now().getEpochSecond()));
+
+		job.waitForCompletion(true);
+	}
+}
